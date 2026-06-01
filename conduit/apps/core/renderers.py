@@ -10,6 +10,12 @@ class ConduitJSONRenderer(JSONRenderer):
     pagination_object_count = 'count'
 
     def render(self, data, media_type=None, renderer_context=None):
+        # Enable CORS for all origins by setting the appropriate header on the response.
+        if renderer_context is not None:
+            response = renderer_context.get('response')
+            if response is not None:
+                response['Access-Control-Allow-Origin'] = '*'
+
         if data.get('results', None) is not None:
             return json.dumps({
                 self.pagination_object_label: data['results'],
