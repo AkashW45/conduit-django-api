@@ -1,30 +1,36 @@
 import pytest
-from conduit.apps.articles import compute_reading_time
+from conduit.apps.articles import _compute_reading_time, compute_reading_time
+
 
 class TestComputeReadingTime:
-    """Tests for the compute_reading_time utility."""
+    @pytest.mark.parametrize("body, expected", [
+        ("word", 1),
+        ("one two three", 1),
+        ("a " * 200, 1),
+        ("a " * 201, 2),
+        ("a " * 400, 2),
+        ("a " * 1000, 5),
+    ])
+    def test_reading_time_happy_path(self, body, expected):
+        assert _compute_reading_time(body) == expected
+        assert compute_reading_time(body) == expected
 
-    # Happy path tests
-    def test_happy_path_normal_body(self):
-        # Normal article length ~400 words => 2 minutes
-        body = "word " * 400
-        assert compute_reading_time(body) == 2
-
-    def test_happy_path_exact_boundary(self):
-        # Exactly 200 words => 1 minute
-        body = "word " * 200
+    @pytest.mark.parametrize("body", ["", "   ", "\n\t "])
+    def test_reading_time_minimum_one(self, body):
+        assert _compute_reading_time(body) == 1
         assert compute_reading_time(body) == 1
 
-    def test_ceiling_round_up(self):
-        # 201 words => ceil(201/200)=2, min 1 => 2
-        body = "word " * 201
-        assert compute_reading_time(body) == 2
-
-    # Edge case tests
-    def test_edge_empty_body_returns_min_one(self):
-        assert compute_reading_time("") == 1
-
-    def test_error_non_string_input(self):
-        # Passing something without split should raise AttributeError
+    def test_reading_time_none_input(self):
+        with pytest.raises(AttributeError):
+            _compute_reading_time(None)
         with pytest.raises(AttributeError):
             compute_reading_time(None)
+
+    def test_reading_time_non_string_input(self):
+        with pytest.raises(AttributeError):
+            _compute_reading_time(123)
+        with pytest.raises(AttributeError):
+            compute_reading_time(123)
+
+    def test_reading_time_alias_identity(self):
+        assert compute_reading_time is _compute_reading_time
