@@ -1,3 +1,5 @@
+import math
+
 from rest_framework import serializers
 
 from conduit.apps.profiles.serializers import ProfileSerializer
@@ -25,6 +27,7 @@ class ArticleSerializer(serializers.ModelSerializer):
     # requirements of the client leak into our API.
     createdAt = serializers.SerializerMethodField(method_name='get_created_at')
     updatedAt = serializers.SerializerMethodField(method_name='get_updated_at')
+    readingTimeMinutes = serializers.SerializerMethodField(method_name='get_reading_time_minutes')
 
     class Meta:
         model = Article
@@ -39,6 +42,7 @@ class ArticleSerializer(serializers.ModelSerializer):
             'tagList',
             'title',
             'updatedAt',
+            'readingTimeMinutes',
         )
 
     def create(self, validated_data):
@@ -72,6 +76,11 @@ class ArticleSerializer(serializers.ModelSerializer):
 
     def get_updated_at(self, instance):
         return instance.updated_at.isoformat()
+
+    def get_reading_time_minutes(self, instance):
+        word_count = len(instance.body.split())
+        minutes = math.ceil(word_count / 200)
+        return max(minutes, 1)
 
 
 class CommentSerializer(serializers.ModelSerializer):

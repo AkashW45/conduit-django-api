@@ -11,6 +11,22 @@ from .renderers import ArticleJSONRenderer, CommentJSONRenderer
 from .serializers import ArticleSerializer, CommentSerializer, TagSerializer
 
 
+def _add_reading_time(data):
+    import math
+    if isinstance(data, list):
+        for item in data:
+            body = item.get('body', '')
+            word_count = len(body.split()) if body else 0
+            minutes = max(1, math.ceil(word_count / 200))
+            item['reading_time_minutes'] = minutes
+    else:
+        body = data.get('body', '')
+        word_count = len(body.split()) if body else 0
+        minutes = max(1, math.ceil(word_count / 200))
+        data['reading_time_minutes'] = minutes
+    return data
+
+
 class ArticleViewSet(mixins.CreateModelMixin, 
                      mixins.ListModelMixin,
                      mixins.RetrieveModelMixin,
@@ -66,7 +82,8 @@ class ArticleViewSet(mixins.CreateModelMixin,
             many=True
         )
 
-        return self.get_paginated_response(serializer.data)
+        data = _add_reading_time(serializer.data)
+        return self.get_paginated_response(data)
 
     def retrieve(self, request, slug):
         serializer_context = {'request': request}
@@ -81,7 +98,8 @@ class ArticleViewSet(mixins.CreateModelMixin,
             context=serializer_context
         )
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = _add_reading_time(serializer.data)
+        return Response(data, status=status.HTTP_200_OK)
 
 
     def update(self, request, slug):
