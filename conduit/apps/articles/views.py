@@ -70,7 +70,8 @@ class ArticleViewSet(mixins.CreateModelMixin,
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        data = _add_reading_time(serializer.data)
+        return Response(data, status=status.HTTP_201_CREATED)
 
     def list(self, request):
         serializer_context = {'request': request}
@@ -121,7 +122,8 @@ class ArticleViewSet(mixins.CreateModelMixin,
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = _add_reading_time(serializer.data)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class CommentsListCreateAPIView(generics.ListCreateAPIView):
@@ -193,7 +195,8 @@ class ArticlesFavoriteAPIView(APIView):
 
         serializer = self.serializer_class(article, context=serializer_context)
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        data = _add_reading_time(serializer.data)
+        return Response(data, status=status.HTTP_200_OK)
 
     def post(self, request, article_slug=None):
         profile = self.request.user.profile
@@ -208,7 +211,8 @@ class ArticlesFavoriteAPIView(APIView):
 
         serializer = self.serializer_class(article, context=serializer_context)
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        data = _add_reading_time(serializer.data)
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class TagListAPIView(generics.ListAPIView):
@@ -246,4 +250,5 @@ class ArticlesFeedAPIView(generics.ListAPIView):
             page, context=serializer_context, many=True
         )
 
-        return self.get_paginated_response(serializer.data)
+        data = _add_reading_time(serializer.data)
+        return self.get_paginated_response(data)
