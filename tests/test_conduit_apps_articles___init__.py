@@ -1,30 +1,43 @@
 import pytest
 from conduit.apps.articles import compute_reading_time
 
-class TestComputeReadingTime:
-    """Tests for the compute_reading_time utility."""
+# Happy path: parametrize different word counts and expected rounded minutes
+@pytest.mark.parametrize("body, expected", [
+    ("This is a short text.", 1),
+    ("a " * 199, 1),   # 199 words -> 0.995, ceil=1, max(1)=1
+    ("a " * 200, 1),   # exactly 200 words -> ceil(1)=1
+    ("a " * 201, 2),   # 201 words -> ceil(1.005)=2
+    ("word " * 500, 3), # 500 words -> 2.5, ceil=3
+    ("a " * 1000, 5),  # 1000 words -> 5, ceil=5
+])
+def test_reading_time_happy_path(body, expected):
+    assert compute_reading_time(body) == expected
 
-    # Happy path tests
-    def test_happy_path_normal_body(self):
-        # Normal article length ~400 words => 2 minutes
-        body = "word " * 400
-        assert compute_reading_time(body) == 2
+# Edge case: empty or whitespace-only body returns 1 (minimum)
+def test_reading_time_empty_or_whitespace():
+    assert compute_reading_time("") == 1
+    assert compute_reading_time("    ") == 1
+    assert compute_reading_time("\t\n") == 1
 
-    def test_happy_path_exact_boundary(self):
-        # Exactly 200 words => 1 minute
-        body = "word " * 200
-        assert compute_reading_time(body) == 1
+# Edge case: punctuation doesn't affect word splitting (based on whitespace)
+def test_reading_time_with_punctuation():
+    assert compute_reading_time("Hello, world!") == 1      # 2 words
+    # 6 words
+    assert compute_reading_time("Hello, world! This is a test.") == 1
+    # 200 punctuated words
+    body = "a! b? c: d; e. " * 40   # 5*40 = 200 words
+    assert compute_reading_time(body) == 1
 
-    def test_ceiling_round_up(self):
-        # 201 words => ceil(201/200)=2, min 1 => 2
-        body = "word " * 201
-        assert compute_reading_time(body) == 2
+# Edge case: body with newlines and multiple spaces still splits correctly
+def test_reading_time_newlines_and_multiple_spaces():
+    body = "one  two\nthree   four"
+    assert compute_reading_time(body) == 1
 
-    # Edge case tests
-    def test_edge_empty_body_returns_min_one(self):
-        assert compute_reading_time("") == 1
-
-    def test_error_non_string_input(self):
-        # Passing something without split should raise AttributeError
-        with pytest.raises(AttributeError):
-            compute_reading_time(None)
+# Error path: passing None or non‑string raises AttributeError
+def test_reading_time_invalid_body():
+    with pytest.raises(AttributeError):
+        compute_reading_time(None)
+    with pytest.raises(AttributeError):
+        compute_reading_time(123)
+    with pytest.raises(AttributeError):
+        compute_reading_time([])
