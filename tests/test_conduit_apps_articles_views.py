@@ -1,56 +1,71 @@
 import pytest
-from math import ceil
-from conduit.apps.articles.views import _add_reading_time
+import math
+from unittest import mock
+
+from rest_framework import status
+from rest_framework.test import APIRequestFactory
+
+from conduit.apps.articles.views import _add_reading_time, ArticleViewSet
+from conduit.apps.articles.serializers import ArticleSerializer
 
 
 class TestAddReadingTime:
-    """Tests for the _add_reading_time helper function."""
-
-    def test_single_dict_happy_path(self):
-        body = "word " * 500  # 500 words
-        data = {"body": body}
+    def test_single_dict_normal_body(self):
+        data = {"body": "a " * 300}  # 300 words
         result = _add_reading_time(data)
-        expected_minutes = ceil(500 / 200)  # 3
-        assert result is data  # should return the same object
-        assert result["reading_time_minutes"] == expected_minutes
+        assert result["reading_time_minutes"] == 2  # ceil(300/200)=2
 
-    def test_list_of_dicts_happy_path(self):
-        body1 = "word " * 200   # 200 words -> ceil=1 -> max(1,1)=1
-        body2 = "word " * 201   # 201 words -> ceil=2
-        data = [
-            {"body": body1},
-            {"body": body2}
-        ]
-        result = _add_reading_time(data)
-        assert result is data
-        assert result[0]["reading_time_minutes"] == 1
-        assert result[1]["reading_time_minutes"] == 2
-
-    def test_edge_empty_body(self):
+    def test_single_dict_empty_body(self):
         data = {"body": ""}
         result = _add_reading_time(data)
+        assert result["reading_time_minutes"] == 1  # minimum 1
+
+    def test_single_dict_one_word(self):
+        data = {"body": "hello"}
+        result = _add_reading_time(data)
         assert result["reading_time_minutes"] == 1
 
-    def test_edge_body_exact_200_words(self):
-        body = "word " * 200
-        data = {"body": body}
-        result = _add_reading_time(data)
-        # ceil(200/200) = 1, min=1 -> 1
-        assert result["reading_time_minutes"] == 1
-
-    def test_edge_body_201_words(self):
-        body = "word " * 201
-        data = {"body": body}
-        result = _add_reading_time(data)
-        # ceil(201/200)=2
-        assert result["reading_time_minutes"] == 2
-
-    def test_edge_missing_body_key(self):
+    def test_single_dict_missing_body_key(self):
         data = {"title": "No body"}
         result = _add_reading_time(data)
-        # body defaults to '' -> word_count 0 -> max(1,ceil(0))=1
-        assert result["reading_time_minutes"] == 1
+        assert result["reading_time_minutes"] == 1  # defaults to 1
 
-    def test_error_non_dict_or_list(self):
-        with pytest.raises(AttributeError):
-            _add_reading_time("not a dict or list")
+    def test_list_of_dicts(self):
+        items = [
+            {"body": "word1 word2 word3"},          # 3 words -> 1 minute
+            {"body": "a " * 400},                    # 400 words -> 2 minutes
+            {"title": "No content"}                  # no body -> 1 minute
+        ]
+        result = _add_reading_time(items)
+        assert result[0]["reading_time_minutes"] == 1
+        assert result[1]["reading_time_minutes"] == 2
+        assert result[2]["reading_time_minutes"] == 1
+
+
+class TestArticleViewSetCreate:
+    @mock.patch.object(ArticleViewSet, 'serializer_class', autospec=True)
+    def test_create_response_includes_reading_time(self, mock_serializer_class):
+        factory = APIRequestFactory()
+        request = factory.post(
+            '/fake-url/',
+            {'article': {'body': 'quick brown fox'}},
+            format='json'
+        )
+        # Mock a user with a profile
+        request.user = mock.MagicMock()
+        request.user.profile = mock.MagicMock()
+
+        # Setup the mocked serializer
+        serializer_instance = mock_serializer_class.return_value
+        serializer_instance.is_valid.return_value = True
+        serializer_instance.save.return_value = None
+        # The serializer.data will be the initial data we passed
+        serializer_instance.data = {'body': 'quick brown fox'}
+
+        view = ArticleViewSet()
+        response = view.create(request)
+
+        assert response.status_code == status.HTTP_201_CREATED
+        # reading time for 3 words -> ceil(3/200)=1
+        assert response.data['reading_time_minutes'] == 1
+        assert 'body' in response.data

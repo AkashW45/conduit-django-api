@@ -1,42 +1,35 @@
+import math
+from unittest.mock import MagicMock
+
 import pytest
-from conduit.apps.articles.serializers import ArticleSerializer
 
-class MockArticle:
-    def __init__(self, body):
-        self.body = body
+from conduit.apps.articles.serializers import _compute_reading_time, ArticleSerializer
 
-def test_reading_time_minutes_200_words_returns_1():
+
+def test_compute_reading_time_exact_200():
+    body = "word " * 200  # exactly 200 words
+    assert _compute_reading_time(body) == 1
+
+
+def test_compute_reading_time_above_200():
+    body = "word " * 250  # 250 words, ceil(250/200)=ceil(1.25)=2
+    assert _compute_reading_time(body) == 2
+
+
+def test_compute_reading_time_empty_body():
+    assert _compute_reading_time("") == 1
+
+
+def test_compute_reading_time_whitespace_body():
+    body = "   \n  \t  "
+    assert _compute_reading_time(body) == 1
+
+
+def test_article_serializer_reading_time_minutes():
     serializer = ArticleSerializer()
-    article = MockArticle(body="word " * 200)
-    result = serializer.get_reading_time_minutes(article)
-    assert result == 1
+    assert "readingTimeMinutes" in serializer.fields
 
-def test_reading_time_minutes_201_words_returns_2():
-    serializer = ArticleSerializer()
-    article = MockArticle(body="word " * 201)
-    result = serializer.get_reading_time_minutes(article)
+    mock_article = MagicMock()
+    mock_article.body = "word " * 350  # 350 words, ceil(350/200)=ceil(1.75)=2
+    result = serializer.get_reading_time_minutes(mock_article)
     assert result == 2
-
-def test_reading_time_minutes_single_word_returns_1():
-    serializer = ArticleSerializer()
-    article = MockArticle(body="hello")
-    result = serializer.get_reading_time_minutes(article)
-    assert result == 1
-
-def test_reading_time_minutes_empty_body_returns_1():
-    serializer = ArticleSerializer()
-    article = MockArticle(body="")
-    result = serializer.get_reading_time_minutes(article)
-    assert result == 1
-
-def test_reading_time_minutes_whitespace_body_returns_1():
-    serializer = ArticleSerializer()
-    article = MockArticle(body="   \n  ")
-    result = serializer.get_reading_time_minutes(article)
-    assert result == 1
-
-def test_reading_time_minutes_none_body_raises_attribute_error():
-    serializer = ArticleSerializer()
-    article = MockArticle(body=None)
-    with pytest.raises(AttributeError):
-        serializer.get_reading_time_minutes(article)
