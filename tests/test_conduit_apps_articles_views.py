@@ -1,56 +1,131 @@
+import math
 import pytest
-from math import ceil
-from conduit.apps.articles.views import _add_reading_time
+from django.contrib.auth.models import User
+from rest_framework.test import APIRequestFactory, force_authenticate
+
+from conduit.apps.articles.views import (
+    _add_reading_time, ArticleViewSet
+)
+from conduit.apps.articles.models import Article
 
 
-class TestAddReadingTime:
-    """Tests for the _add_reading_time helper function."""
+@pytest.mark.django_db
+class TestAddReadingTimeFunction:
+    """Unit tests for _add_reading_time helper."""
 
-    def test_single_dict_happy_path(self):
-        body = "word " * 500  # 500 words
-        data = {"body": body}
+    def test_single_dict_adds_reading_time(self):
+        data = {'body': 'hello world'}  # 2 words
         result = _add_reading_time(data)
-        expected_minutes = ceil(500 / 200)  # 3
-        assert result is data  # should return the same object
-        assert result["reading_time_minutes"] == expected_minutes
+        assert result['reading_time_minutes'] == 1
+        assert isinstance(result['reading_time_minutes'], int)
 
-    def test_list_of_dicts_happy_path(self):
-        body1 = "word " * 200   # 200 words -> ceil=1 -> max(1,1)=1
-        body2 = "word " * 201   # 201 words -> ceil=2
+    def test_empty_body_returns_1_minute(self):
+        data = {'body': ''}
+        result = _add_reading_time(data)
+        assert result['reading_time_minutes'] == 1
+
+    def test_body_with_many_words_rounds_up(self):
+        # 500 words -> 500/200 = 2.5 -> ceil 3
+        data = {'body': 'word ' * 500}
+        result = _add_reading_time(data)
+        assert result['reading_time_minutes'] == 3
+
+    def test_boundary_200_words_is_1_minute(self):
+        data = {'body': 'word ' * 200}
+        result = _add_reading_time(data)
+        assert result['reading_time_minutes'] == 1
+
+    def test_boundary_201_words_is_2_minutes(self):
+        data = {'body': 'word ' * 201}
+        result = _add_reading_time(data)
+        assert result['reading_time_minutes'] == 2
+
+    def test_list_of_dicts_adds_reading_time_to_each(self):
         data = [
-            {"body": body1},
-            {"body": body2}
+            {'body': 'a b c'},  # 3 words -> 1
+            {'body': 'a'}       # 1 word -> 1
         ]
         result = _add_reading_time(data)
-        assert result is data
-        assert result[0]["reading_time_minutes"] == 1
-        assert result[1]["reading_time_minutes"] == 2
+        assert result[0]['reading_time_minutes'] == 1
+        assert result[1]['reading_time_minutes'] == 1
 
-    def test_edge_empty_body(self):
-        data = {"body": ""}
+    def test_missing_body_key_defaults_to_empty_string(self):
+        data = {}
         result = _add_reading_time(data)
-        assert result["reading_time_minutes"] == 1
+        assert result['reading_time_minutes'] == 1
 
-    def test_edge_body_exact_200_words(self):
-        body = "word " * 200
-        data = {"body": body}
-        result = _add_reading_time(data)
-        # ceil(200/200) = 1, min=1 -> 1
-        assert result["reading_time_minutes"] == 1
 
-    def test_edge_body_201_words(self):
-        body = "word " * 201
-        data = {"body": body}
-        result = _add_reading_time(data)
-        # ceil(201/200)=2
-        assert result["reading_time_minutes"] == 2
+@pytest.mark.django_db
+class TestArticleCreateViewReadingTime:
+    """Integration tests for ArticleViewSet.create endpoint."""
 
-    def test_edge_missing_body_key(self):
-        data = {"title": "No body"}
-        result = _add_reading_time(data)
-        # body defaults to '' -> word_count 0 -> max(1,ceil(0))=1
-        assert result["reading_time_minutes"] == 1
+    def _create_user(self):
+        return User.objects.create_user(
+            username='testuser',
+            password='secret',
+            email='test@test.com'
+        )
 
-    def test_error_non_dict_or_list(self):
-        with pytest.raises(AttributeError):
-            _add_reading_time("not a dict or list")
+    def _setup_request(self, user, data):
+        factory = APIRequestFactory()
+        request = factory.post('/articles/', data, format='json')
+        force_authenticate(request, user=user)
+        return request
+
+    def test_happy_path_reading_time_present(self):
+        user = self._create_user()
+        # Article data with a specific body word count
+        data = {
+            'article': {
+                'title': 'Test Article',
+                'description': 'desc',
+                'body': 'one two three four five',  # 5 words -> 1 minute
+            }
+        }
+        request = self._setup_request(user, data)
+        view = ArticleViewSet.as_view({'post': 'create'})
+        response = view(request)
+        assert response.status_code == 201
+        assert 'reading_time_minutes' in response.data
+        assert response.data['reading_time_minutes'] == 1
+
+    def test_empty_body_reading_time_is_1(self):
+        user = self._create_user()
+        data = {
+            'article': {
+                'title': 'Empty',
+                'body': '',
+            }
+        }
+        request = self._setup_request(user, data)
+        view = ArticleViewSet.as_view({'post': 'create'})
+        response = view(request)
+        assert response.status_code == 201
+        assert response.data['reading_time_minutes'] == 1
+
+    def test_large_body_reading_time_rounds_up(self):
+        user = self._create_user()
+        body_words = 'word ' * 500  # 500 words
+        data = {
+            'article': {
+                'title': 'Long',
+                'body': body_words,
+            }
+        }
+        request = self._setup_request(user, data)
+        view = ArticleViewSet.as_view({'post': 'create'})
+        response = view(request)
+        assert response.status_code == 201
+        assert response.data['reading_time_minutes'] == 3
+
+    def test_invalid_data_does_not_add_reading_time(self):
+        user = self._create_user()
+        # Missing required fields – serializer should reject
+        data = {'article': {}}
+        request = self._setup_request(user, data)
+        view = ArticleViewSet.as_view({'post': 'create'})
+        response = view(request)
+        # Expect validation error
+        assert response.status_code == 400
+        # reading_time_minutes should not be in response (errors are serializer.errors)
+        assert 'reading_time_minutes' not in response.data
