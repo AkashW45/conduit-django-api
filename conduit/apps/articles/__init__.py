@@ -12,6 +12,7 @@ def compute_reading_time(body: str) -> int:
     return max(minutes, 1)
 
 
+
 class ArticlesAppConfig(AppConfig):
     name = 'conduit.apps.articles'
     label = 'articles'

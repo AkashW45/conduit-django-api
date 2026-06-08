@@ -8,6 +8,12 @@ from .models import Article, Comment, Tag
 from .relations import TagRelatedField
 
 
+def _compute_reading_time(body):
+    word_count = len(body.split())
+    minutes = math.ceil(word_count / 200)
+    return max(minutes, 1)
+
+
 class ArticleSerializer(serializers.ModelSerializer):
     author = ProfileSerializer(read_only=True)
     description = serializers.CharField(required=False)
@@ -78,9 +84,7 @@ class ArticleSerializer(serializers.ModelSerializer):
         return instance.updated_at.isoformat()
 
     def get_reading_time_minutes(self, instance):
-        word_count = len(instance.body.split())
-        minutes = math.ceil(word_count / 200)
-        return max(minutes, 1)
+        return _compute_reading_time(instance.body)
 
 
 class CommentSerializer(serializers.ModelSerializer):
